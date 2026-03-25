@@ -33,13 +33,15 @@ OUTPUT_PATH = "tiktok_videos.csv"
 def download_audio(url, output_path):
     """Download audio from a TikTok video URL using yt-dlp."""
     cmd = [
-        "yt-dlp",
+        sys.executable, "-m", "yt_dlp",
         "--extract-audio",
         "--audio-format", "wav",
         "--audio-quality", "0",
         "-o", output_path,
         "--no-playlist",
         "--quiet",
+        "--cookies-from-browser", "chrome",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         url,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
