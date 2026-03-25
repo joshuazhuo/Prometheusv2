@@ -29,38 +29,66 @@ import time
 CSV_PATH = "tiktok_videos.csv"
 OUTPUT_PATH = "tiktok_videos.csv"
 
+# Ensure ffmpeg is available for both yt-dlp and Whisper
+os.environ["PATH"] = r"C:\Users\Rachel\AppData\Local\Microsoft\WinGet\Links" + os.pathsep + os.environ.get("PATH", "")
 
-def download_audio(url, output_path):
-    """Download audio from a TikTok video URL using yt-dlp."""
-    cmd = [
-        sys.executable, "-m", "yt_dlp",
-        "--extract-audio",
-        "--audio-format", "wav",
-        "--audio-quality", "0",
-        "-o", output_path,
-        "--no-playlist",
-        "--quiet",
-        "--cookies-from-browser", "chrome",
-        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        url,
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-    if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp failed: {result.stderr.strip()}")
 
-    # yt-dlp may create the file with a different extension
+def _find_downloaded_file(output_path):
+    """Find the actual file yt-dlp created, regardless of extension."""
     if os.path.exists(output_path):
         return output_path
-    # Check for common variants
-    for ext in [".wav", ".wav.wav", ".mp3", ".m4a", ".webm"]:
+    for ext in [".wav", ".wav.wav", ".mp3", ".m4a", ".webm", ".mp4", ".ogg"]:
         candidate = output_path + ext
         if os.path.exists(candidate):
             return candidate
-    # Try glob pattern
     base = os.path.splitext(output_path)[0]
     matches = glob.glob(f"{base}*")
     if matches:
         return matches[0]
+    return None
+
+
+def download_audio(url, output_path):
+    """Download audio from a TikTok video URL using yt-dlp.
+
+    First tries WAV conversion; if ffprobe codec detection fails, falls back
+    to downloading the native format which Whisper can handle directly.
+    """
+    ffmpeg_loc = r"C:\Users\Rachel\AppData\Local\Microsoft\WinGet\Links"
+    base_flags = [
+        sys.executable, "-m", "yt_dlp",
+        "--no-playlist",
+        "--quiet",
+        "--ffmpeg-location", ffmpeg_loc,
+    ]
+
+    # Attempt 1: extract and convert to WAV
+    cmd = base_flags + [
+        "--extract-audio",
+        "--audio-format", "wav",
+        "--audio-quality", "0",
+        "-o", output_path,
+        url,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    if result.returncode == 0:
+        found = _find_downloaded_file(output_path)
+        if found:
+            return found
+
+    # Attempt 2: download best available format (video+audio) without conversion
+    native_path = output_path + ".native"
+    cmd2 = base_flags + [
+        "--format", "bestaudio/best",
+        "-o", native_path,
+        url,
+    ]
+    result2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=180)
+    if result2.returncode != 0:
+        raise RuntimeError(f"yt-dlp failed: {result2.stderr.strip()}")
+    found = _find_downloaded_file(native_path)
+    if found:
+        return found
     raise FileNotFoundError(f"Audio file not found after download: {output_path}")
 
 
